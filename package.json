@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "express": "^5.1.0",
+    "child_process": "^1.0.2",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "scripts": {
+    "start": "concurrently \"node server.js\" \"cd front && npm run dev\"",
+    "install-all": "npm install && cd front && npm install",
+    "build": "cd front && npm run build",
+    "dev": "node server.js"
+  }
+}

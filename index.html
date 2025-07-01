@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Folder Selector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        /* The input[type=file] is now removed as selection is triggered by backend */
+        .button-style {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .button-style:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        .message-box {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #e0f2f7;
+            border: 1px solid #b3e5fc;
+            color: #01579b;
+            text-align: left;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .message-box.error {
+            background-color: #ffebee;
+            border-color: #ef9a9a;
+            color: #c62828;
+        }
+        .loading-spinner {
+            display: none;
+            margin: 15px auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">Select Folder via Local Service</h1>
+        <p class="text-gray-600 mb-6">
+            Click the button below to ask your local Node.js service to launch a folder selection dialog. The full path will be handled by the Node.js service, and only a confirmation will be sent back to this page.
+        </p>
+
+        <div class="file-input-wrapper">
+            <button id="selectFolderButton" class="button-style">Launch Folder Selector (via API)</button>
+        </div>
+
+        <div id="loadingSpinner" class="loading-spinner"></div>
+        <div id="message" class="message-box">
+            Click the button to start folder selection via your local API.
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const selectFolderButton = document.getElementById('selectFolderButton');
+            const messageDiv = document.getElementById('message');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+
+            /**
+             * Displays a message in the UI.
+             * @param {string} msg - The message to display.
+             * @param {boolean} isError - True if the message is an error, false otherwise.
+             */
+            function displayMessage(msg, isError = false) {
+                messageDiv.textContent = msg;
+                messageDiv.classList.remove('error');
+                if (isError) {
+                    messageDiv.classList.add('error');
+                }
+            }
+
+            /**
+             * Shows or hides the loading spinner.
+             * @param {boolean} show - True to show, false to hide.
+             */
+            function toggleLoading(show) {
+                loadingSpinner.style.display = show ? 'block' : 'none';
+            }
+
+            selectFolderButton.addEventListener('click', async () => {
+                displayMessage('Requesting local service to launch folder selector...');
+                toggleLoading(true);
+
+                const localServiceUrl = 'http://localhost:3001/launch-folder-selector'; // Your Node.js service URL
+
+                try {
+                    const response = await fetch(localServiceUrl, {
+                        method: 'POST', // Use POST as it's an action
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                        // No body needed for this request, as the backend launches the dialog
+                    });
+
+                    if (response.ok) {
+                        const apiResponse = await response.json();
+                        displayMessage(`Local service responded: ${apiResponse.message}${apiResponse.folderName ? ` Selected folder: "${apiResponse.folderName}"` : ''}`);
+                    } else {
+                        const errorData = await response.json(); // Assuming API sends JSON error
+                        displayMessage(`Local service error: ${errorData.message || response.statusText}`, true);
+                        console.error('API response error:', errorData);
+                    }
+                } catch (error) {
+                    console.error('Error connecting to local service or during fetch:', error);
+                    displayMessage(`Could not connect to local service at ${localServiceUrl}. Make sure your Node.js service is running and accessible. Error: ${error.message}`, true);
+                } finally {
+                    toggleLoading(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
