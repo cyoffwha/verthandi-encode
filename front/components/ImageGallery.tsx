@@ -13,6 +13,8 @@ interface ImageData {
   isEncoded: boolean;
   size?: string;
   type?: string;
+  originalSize?: number; // Size in bytes
+  encodedSize?: number; // Size in bytes
 }
 
 export const ImageGallery = () => {
@@ -87,7 +89,7 @@ export const ImageGallery = () => {
       );
 
       // Get the list of reencoded files if the folder exists
-      let reencodedFiles: string[] = [];
+      let reencodedFiles: any[] = [];
       if (hasReencodedFolder) {
         const reencodedResponse = await fetch('http://localhost:3001/list-files', {
           method: 'POST',
@@ -99,7 +101,7 @@ export const ImageGallery = () => {
 
         if (reencodedResponse.ok) {
           const reencodedData = await reencodedResponse.json();
-          reencodedFiles = reencodedData.files.map((file: any) => file.name);
+          reencodedFiles = reencodedData.files.filter((file: any) => file.type === 'file');
         }
       }
 
@@ -107,10 +109,18 @@ export const ImageGallery = () => {
       const imageData = imageFiles.map((file: any, index: number) => {
         const fileName = file.name;
         const baseName = fileName.substring(0, fileName.lastIndexOf('.'));
+        
         // Check if this image has been reencoded
-        const isEncoded = reencodedFiles.some(name => 
-          name === `${fileName}.jxl` || name === `${baseName}.jxl`
+        const matchingReencodedFile = reencodedFiles.find(reencoded => 
+          reencoded.name === `${fileName}.jxl` || reencoded.name === `${baseName}.jxl`
         );
+        
+        const isEncoded = !!matchingReencodedFile;
+        
+        const originalSize = typeof file.size === 'number' ? file.size : undefined;
+        const encodedSize = isEncoded && typeof matchingReencodedFile.size === 'number' 
+          ? matchingReencodedFile.size 
+          : undefined;
 
         return {
           id: `img-${index}`,
@@ -118,8 +128,10 @@ export const ImageGallery = () => {
           url: `http://localhost:3001/get-image/${encodeURIComponent(folderPath)}/${encodeURIComponent(fileName)}`,
           thumbnailUrl: `http://localhost:3001/get-image/${encodeURIComponent(folderPath)}/${encodeURIComponent(fileName)}`,
           isEncoded,
-          size: typeof file.size === 'number' ? formatFileSize(file.size) : 'Unknown',
-          type: getFileType(fileName)
+          size: originalSize ? formatFileSize(originalSize) : 'Unknown',
+          type: getFileType(fileName),
+          originalSize,
+          encodedSize
         };
       });
 
@@ -176,21 +188,21 @@ export const ImageGallery = () => {
         throw new Error('Failed to start re-encoding process');
       }
 
-      const result = await response.json();
-      
-      // Update UI based on results
-      const updatedImages = [...images];
-      result.results.forEach((result: any) => {
-        if (result.status === 'success') {
-          const imageIndex = updatedImages.findIndex(img => img.name === result.file);
-          if (imageIndex !== -1) {
-            updatedImages[imageIndex] = {
-              ...updatedImages[imageIndex],
-              isEncoded: true
-            };
-          }
-        }
-      });
+      const result = await response.json();          // Update UI based on results
+          const updatedImages = [...images];
+          result.results.forEach((result: any) => {
+            if (result.status === 'success') {
+              const imageIndex = updatedImages.findIndex(img => img.name === result.file);
+              if (imageIndex !== -1) {
+                updatedImages[imageIndex] = {
+                  ...updatedImages[imageIndex],
+                  isEncoded: true,
+                  originalSize: result.oldSize,
+                  encodedSize: result.newSize
+                };
+              }
+            }
+          });
       
       setImages(updatedImages);
       
@@ -266,9 +278,12 @@ export const ImageGallery = () => {
                   
                   <div
                     className={`absolute top-2 right-2 w-4 h-4 rounded-full border-2 border-white shadow-lg transition-all duration-300 ${
-                      image.isEncoded 
-                        ? 'bg-green-500 shadow-green-500/50' 
-                        : 'bg-black shadow-black/50'
+                      !image.isEncoded 
+                        ? 'bg-black shadow-black/50'
+                        : image.originalSize && image.encodedSize && 
+                          ((image.originalSize - image.encodedSize) / image.originalSize * 100 >= 5)
+                          ? 'bg-green-500 shadow-green-500/50' 
+                          : 'bg-gray-500 shadow-gray-500/50'
                     }`}
                   />
                   
@@ -279,6 +294,15 @@ export const ImageGallery = () => {
                     {image.size && (
                       <p className="text-white/70 text-xs">
                         {image.size}
+                        {image.isEncoded && image.originalSize && image.encodedSize && (
+                          <span className={`ml-1 ${
+                            (image.originalSize - image.encodedSize) / image.originalSize * 100 >= 5
+                              ? 'text-green-400'
+                              : 'text-gray-400'
+                          }`}>
+                            ({Math.round((image.originalSize - image.encodedSize) / image.originalSize * 100)}% smaller)
+                          </span>
+                        )}
                       </p>
                     )}
                   </div>
@@ -299,7 +323,11 @@ export const ImageGallery = () => {
 
       {selectedImage && (
         <ImageModal
-          image={selectedImage}
+          image={{
+            ...selectedImage,
+            originalSize: selectedImage.originalSize,
+            encodedSize: selectedImage.encodedSize
+          }}
           onClose={closeModal}
         />
       )}
